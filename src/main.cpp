@@ -3,40 +3,43 @@
 #include <cstdlib>
 #include <blt/std/logging.h>
 #include <blt/parse/argparse.h>
+#include <filemanager.h>
+
 
 int main(int argc, const char** argv)
 {
     blt::arg_parse parser;
-    parser.addArgument(
-            blt::arg_builder("-t", "--token").setDefault("uWU").setAction(blt::arg_action_t::STORE).setHelp("The discord bot token").setRequired()
-                                             .build());
-
-//    for (int i = 0; i < argc; i++)
-//        BLT_TRACE(argv[i]);
+    parser.addArgument(blt::arg_builder("-t", "--token").setAction(blt::arg_action_t::STORE).setHelp("The discord bot token").build());
+    parser.addArgument(blt::arg_builder("-p", "--path").setAction(blt::arg_action_t::STORE).setHelp("Path to store the archive data").build());
     
     auto args = parser.parse_args(argc, argv);
     
-    BLT_TRACE(args.get<std::string>("--token"));
-    BLT_TRACE(argv[argc - 1]);
-    dpp::cluster bot(argv[argc - 1], dpp::i_default_intents | dpp::i_message_content | dpp::i_all_intents);
+    dpp::cluster bot(args.get<std::string>("token"), dpp::i_default_intents | dpp::i_message_content | dpp::i_all_intents);
     
-    bot.on_slashcommand([](auto event) {
-        if (event.command.get_command_name() == "ping")
-        {
-            event.reply("Pong!");
-        }
+    db::fs_manager manager{args.get<std::string>("path"), bot};
+    
+    bot.start_timer([&manager](auto) {
+        manager.flush();
+    }, 60);
+    
+    bot.on_message_delete([&bot](const dpp::message_delete_t& event) {
+    
     });
     
-    bot.on_ready([&bot](auto event) {
-        if (dpp::run_once<struct register_bot_commands>())
-        {
-            bot.global_command_create(dpp::slashcommand("ping", "Ping pong!", bot.me.id));
-        }
+    bot.on_message_delete_bulk([&bot](const dpp::message_delete_bulk_t& event) {
+    
+    });
+    
+    bot.on_message_update([&bot](const dpp::message_update_t& event) {
+    
     });
     
     bot.on_message_create([&bot](const dpp::message_create_t& event) {
         if (event.msg.id == bot.me.id)
             return;
+        bot.guild_get(event.msg.guild_id, [](const dpp::confirmation_callback_t& con) {
+            BLT_INFO("Guild name: %s", con.get<dpp::guild>().name.c_str());
+        });
         BLT_TRACE("(%s)> %s", event.msg.author.username.c_str(), event.msg.content.c_str());
         for (const dpp::attachment& attach : event.msg.attachments)
         {
@@ -54,7 +57,5 @@ int main(int argc, const char** argv)
     });
     
     bot.start(dpp::st_wait);
-    return 0;
-    std::cout << "Hello, World!" << std::endl;
     return 0;
 }
