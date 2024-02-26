@@ -111,7 +111,7 @@ namespace db
         return local_day_path;
     }
     
-    void channel_flusher::flush_channels(HASHMAP<blt::u64, std::unique_ptr<channel_fs_manager>>& map)
+    void channel_flusher::flush_channels(blt::hashmap_t<blt::u64, std::unique_ptr<channel_fs_manager>>& map)
     {
         channels_to_flush.reserve(map.size());
         for (auto& v : map)

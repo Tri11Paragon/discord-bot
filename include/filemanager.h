@@ -53,7 +53,7 @@ namespace db
     {
         private:
             blt::u64 channelID;
-            HASHMAP<blt::u64, msg_fs_manager> msgs;
+            blt::hashmap_t<blt::u64, msg_fs_manager> msgs;
         public:
             explicit channel_fs_manager(blt::u64 channelID): channelID(channelID)
             {}
@@ -64,7 +64,7 @@ namespace db
         private:
             std::vector<std::unique_ptr<channel_fs_manager>> channels_to_flush;
         public:
-            void flush_channels(HASHMAP<blt::u64, std::unique_ptr<channel_fs_manager>>& map);
+            void flush_channels(blt::hashmap_t<blt::u64, std::unique_ptr<channel_fs_manager>>& map);
     };
     
     class guild_fs_manager
@@ -73,7 +73,7 @@ namespace db
             std::string archive_path;
             std::string path;
             blt::u64 guildID;
-            HASHMAP<blt::u64, std::unique_ptr<channel_fs_manager>> channels;
+            blt::hashmap_t<blt::u64, std::unique_ptr<channel_fs_manager>> channels;
             dpp::cluster& bot;
             channel_flusher flusher;
             std::fstream f_server_name;
@@ -114,7 +114,7 @@ namespace db
     class fs_manager
     {
         private:
-            HASHMAP<blt::u64, std::unique_ptr<guild_fs_manager>> guild_handlers;
+            blt::hashmap_t<blt::u64, std::unique_ptr<guild_fs_manager>> guild_handlers;
             dpp::cluster& bot;
             std::string archive_path;
             int current_day = 0;
