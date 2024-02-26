@@ -14,6 +14,9 @@ set(SQLITE_ORM_ENABLE_CXX_17 ON)
 add_subdirectory(libs/blt)
 add_subdirectory(libs/DPP-10.0.29)
 add_subdirectory(libs/sqlite_orm-1.8.2)
+add_subdirectory(libs/SQLiteCpp-3.3.1)
+
+find_package(CURL)
 
 include_directories(include/)
 file(GLOB_RECURSE PROJECT_BUILD_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
@@ -26,6 +29,8 @@ target_link_options(discord_bot PUBLIC -Wall -Wpedantic -Wno-comment)
 target_link_libraries(discord_bot PUBLIC BLT)
 target_link_libraries(discord_bot PUBLIC dpp)
 target_link_libraries(discord_bot PUBLIC sqlite_orm)
+target_link_libraries(discord_bot PUBLIC curl)
+target_link_libraries(discord_bot PUBLIC SQLiteCpp sqlite3 pthread dl)
 
 if (${ENABLE_ADDRSAN} MATCHES ON)
     target_compile_options(discord_bot PRIVATE -fsanitize=address)
