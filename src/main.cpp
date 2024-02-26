@@ -15,6 +15,13 @@ struct message_t
     std::string content;
 };
 
+struct attachment_t
+{
+    blt::u64 messageID;
+    blt::u64 channelID;
+    std::string url;
+};
+
 struct user_info_t
 {
     blt::u64 userID;
@@ -39,15 +46,37 @@ struct message_edits_t
     std::string new_content;
 };
 
+struct message_deletes_t
+{
+    blt::u64 messageID;
+    blt::u64 channelID;
+};
+
 
 struct db_obj
 {
     private:
         blt::u64 guildID;
-        std::string path;
     public:
-        db_obj(blt::u64 guildID, std::string_view path): guildID(guildID), path(path)
+        std::vector<message_t> messages;
+        std::vector<user_info_t> user_data;
+        std::vector<channel_info_t> channel_data;
+        std::vector<message_edits_t> message_edits;
+        std::vector<message_deletes_t> message_deletes;
+        std::vector<attachment_t> attachments;
+    public:
+        explicit db_obj(blt::u64 guildID): guildID(guildID)
         {}
+        
+        void dump()
+        {
+        
+        }
+        
+        void check_for_updates(dpp::cluster& bot)
+        {
+        
+        }
 };
 
 namespace db
@@ -62,6 +91,13 @@ namespace db
 
 blt::hashmap_t<blt::u64, db_obj> databases;
 
+db_obj& get(blt::u64 id)
+{
+    if (databases.find(id) == databases.end())
+        databases.insert({id, db_obj{id}});
+    return databases.at(id);
+}
+
 int main(int argc, const char** argv)
 {
     using namespace sqlite_orm;
@@ -75,7 +111,7 @@ int main(int argc, const char** argv)
     dpp::cluster bot(args.get<std::string>("token"), dpp::i_default_intents | dpp::i_message_content | dpp::i_all_intents);
     
     bot.on_message_delete([&bot](const dpp::message_delete_t& event) {
-    
+        BLT_DEBUG("Message %ld deleted content in %ld", event.id, event.channel_id);
     });
     
     bot.on_message_delete_bulk([&bot](const dpp::message_delete_bulk_t& event) {
@@ -90,25 +126,21 @@ int main(int argc, const char** argv)
     bot.on_message_create([&bot](const dpp::message_create_t& event) {
         if (event.msg.id == bot.me.id)
             return;
-        bot.guild_get(event.msg.guild_id, [](const dpp::confirmation_callback_t& con) {
-            BLT_INFO("Guild name: %s", con.get<dpp::guild>().name.c_str());
-        });
+        if (blt::string::contains(event.msg.content, "/dump"))
+        {
+            for (auto g : databases)
+                g.second.dump();
+        }
+        auto& storage = get(event.msg.guild_id);
+        storage.messages.push_back({
+                                           event.msg.id,
+                                           event.msg.channel_id,
+                                           event.msg.author.id,
+                                           event.msg.content
+                                   });
         
-        BLT_TRACE("(%s '%s' aka '%s' with mention '%s')> %s", event.msg.author.username.c_str(), event.msg.author.global_name.c_str(),
-                  event.msg.member.get_nickname().c_str(), event.msg.member.get_mention().c_str(), event.msg.content.c_str());
         for (const dpp::attachment& attach : event.msg.attachments)
-        {
-            BLT_INFO("\tAttachment: %s", attach.url.c_str());
-        }
-        for (const dpp::embed& embed : event.msg.embeds)
-        {
-            BLT_INFO("\tEmbedding: %s", embed.url.c_str());
-        }
-        //BLT_TRACE_STREAM << event.msg.channel_id.str() << " " << event.msg.channel_id.str() << " "  << "\n";
-//        if (blt::string::toLowerCase(event.msg.author.username) != "autismbot" && blt::string::toLowerCase(event.msg.author.username) != "jewhack")
-//        {
-//            //event.reply("Test response " + event.msg.author.global_name);
-//        }
+            storage.attachments.push_back({event.msg.id, event.msg.channel_id, attach.url});
     });
     
     bot.start(dpp::st_wait);

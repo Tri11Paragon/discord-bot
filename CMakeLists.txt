@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.27)
+cmake_minimum_required(VERSION 3.25)
 project(discord_bot)
 
 option(ENABLE_ADDRSAN "Enable the address sanitizer" OFF)
