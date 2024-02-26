@@ -25,7 +25,6 @@ struct attachment_t
 struct user_info_t
 {
     blt::u64 userID;
-    blt::u64 changeTime;
     std::string username;
     std::string global_nickname;
     std::string server_name;
@@ -109,6 +108,14 @@ int main(int argc, const char** argv)
     auto args = parser.parse_args(argc, argv);
     
     dpp::cluster bot(args.get<std::string>("token"), dpp::i_default_intents | dpp::i_message_content | dpp::i_all_intents);
+    
+    bot.on_user_update([&bot](const dpp::user_update_t& event) {
+        BLT_INFO("User '%s' updated in some way; global name: '%s'", event.updated.username.c_str(), event.updated.global_name.c_str());
+    });
+    
+    bot.on_guild_member_update([&bot](const dpp::guild_member_update_t& event) {
+    
+    });
     
     bot.on_message_delete([&bot](const dpp::message_delete_t& event) {
         BLT_DEBUG("Message %ld deleted content in %ld", event.id, event.channel_id);
