@@ -8,8 +8,22 @@
 #include "blt/std/types.h"
 #include "blt/std/utility.h"
 #include <curl/curl.h>
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
 
 namespace sql = sqlite_orm;
+
+struct server_info_t
+{
+    blt::u32 member_count;
+    std::string name;
+    std::string description;
+    std::string icon;
+    std::string splash;
+    std::string discovery_splash;
+    std::string banner;
+};
 
 struct user_info_t
 {
@@ -171,6 +185,8 @@ struct db_obj
 {
     private:
         blt::u64 guildID;
+        blt::u64 total_channels = 0;
+        std::atomic_uint64_t completed_channels = 0;
         database_type db;
         
         void ensure_channel_exists()
@@ -182,11 +198,40 @@ struct db_obj
         {
         
         }
+        
+        bool loading_complete()
+        {
+            return total_channels != 0 && total_channels == completed_channels.load();
+        }
     
     public:
         explicit db_obj(blt::u64 guildID, const std::string& path): guildID(guildID), db(make_database(path + "/" + std::to_string(guildID) + "/"))
         {
             db.sync_schema();
+        }
+        
+        void load(dpp::cluster& bot, const dpp::guild& guild)
+        {
+            total_channels = guild.channels.size();
+            
+            BLT_TRACE("Guild member count: %ld", guild.members.size());
+            for (const auto& member : guild.members)
+            {
+                BLT_TRACE("\t%ld -> %ld", member.first, member.second.user_id);
+            }
+            
+            for (auto channel : guild.channels)
+            {
+                bot.channel_get(channel, [this](const dpp::confirmation_callback_t& event) {
+                    auto channel = event.get<dpp::channel>();
+                    
+                    completed_channels++;
+                });
+            }
+            
+            while (!loading_complete())
+            {}
+            BLT_TRACE("Finished loading guild '%s'", guild.name.c_str());
         }
         
         void commit(const user_info_t& edited)
@@ -231,14 +276,31 @@ struct db_obj
     
 };
 
-blt::hashmap_t<blt::u64, db_obj> databases;
+blt::hashmap_t<blt::u64, std::unique_ptr<db_obj>> databases;
 std::string path;
+blt::u64 total_guilds = 0;
+std::atomic_uint64_t completed_guilds = 0;
+
+bool loading_complete()
+{
+    return total_guilds != 0 && total_guilds == completed_guilds.load();
+}
 
 db_obj& get(blt::u64 id)
 {
     if (databases.find(id) == databases.end())
-        databases.insert({id, db_obj{id, path}});
-    return databases.at(id);
+        databases.insert({id, std::make_unique<db_obj>(id, path)});
+    return *databases.at(id);
+}
+
+template<typename event_type>
+std::function<void(const event_type& event)> wait_wrapper(std::function<void(const event_type& event)>&& func)
+{
+    return [func](const event_type& event) {
+        if (!loading_complete())
+            return;
+        func(event);
+    };
 }
 
 int main(int argc, const char** argv)
@@ -252,30 +314,48 @@ int main(int argc, const char** argv)
     
     dpp::cluster bot(args.get<std::string>("token"), dpp::i_default_intents | dpp::i_message_content | dpp::i_all_intents);
     
-    bot.on_user_update([&bot](const dpp::user_update_t& event) {
+    bot.on_ready([&bot](const dpp::ready_t& event) {
+        if (dpp::run_once<struct fetch_active_guilds>())
+        {
+            total_guilds = event.guild_count;
+            for (blt::u64 server : event.guilds)
+            {
+                bot.guild_get(server, [&bot, server](const dpp::confirmation_callback_t& event) {
+                    BLT_INFO("Fetched data for %ld ('%s')", server, event.get<dpp::guild>().name.c_str());
+                    auto& db = get(server);
+                    
+                    db.load(bot, event.get<dpp::guild>());
+                    
+                    completed_guilds++;
+                });
+            }
+        }
+    });
+    
+    bot.on_user_update(wait_wrapper<dpp::user_update_t>([&bot](const dpp::user_update_t& event) {
         BLT_INFO("User '%s' updated in some way; global name: '%s'", event.updated.username.c_str(), event.updated.global_name.c_str());
-    });
+    }));
     
-    bot.on_guild_member_update([&bot](const dpp::guild_member_update_t& event) {
+    bot.on_guild_member_update(wait_wrapper<dpp::guild_member_update_t>([&bot](const dpp::guild_member_update_t& event) {
     
-    });
+    }));
     
-    bot.on_message_delete([&bot](const dpp::message_delete_t& event) {
+    bot.on_message_delete(wait_wrapper<dpp::message_delete_t>([&bot](const dpp::message_delete_t& event) {
         BLT_DEBUG("Message %ld deleted content in %ld", event.id, event.channel_id);
-    });
+    }));
     
-    bot.on_message_delete_bulk([&bot](const dpp::message_delete_bulk_t& event) {
+    bot.on_message_delete_bulk(wait_wrapper<dpp::message_delete_bulk_t>([&bot](const dpp::message_delete_bulk_t& event) {
     
-    });
+    }));
     
-    bot.on_message_update([&bot](const dpp::message_update_t& event) {
+    bot.on_message_update(wait_wrapper<dpp::message_update_t>([&bot](const dpp::message_update_t& event) {
         auto& storage = get(event.msg.guild_id);
         
         BLT_INFO("%ld (from user %ld in channel %ld ['%s']) -> '%s'", event.msg.id, event.msg.author.id, event.msg.channel_id,
                  event.msg.author.username.c_str(), event.msg.content.c_str());
-    });
+    }));
     
-    bot.on_message_create([&bot](const dpp::message_create_t& event) {
+    bot.on_message_create(wait_wrapper<dpp::message_create_t>([&bot](const dpp::message_create_t& event) {
         if (event.msg.id == bot.me.id)
             return;
         if (blt::string::starts_with(event.msg.content, "!dump"))
@@ -294,8 +374,9 @@ int main(int argc, const char** argv)
 //        {
 //            storage.attachments.push_back({event.msg.id, attach.url});
 //        }
-    });
+    }));
     
     bot.start(dpp::st_wait);
+    
     return 0;
 }

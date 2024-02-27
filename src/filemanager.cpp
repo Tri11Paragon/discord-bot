@@ -23,18 +23,18 @@
 namespace db
 {
     
-    void guild_fs_manager::message_create(blt::u64 channel_id, blt::u64 msg_id, std::string_view content, std::string_view username,
-                                          std::string_view display_name, const std::vector<dpp::attachment>& attachments)
+    void guild_fs_manager::message_create(blt::u64, blt::u64, std::string_view, std::string_view,
+                                          std::string_view, const std::vector<dpp::attachment>&)
     {
     
     }
     
-    void guild_fs_manager::message_delete(blt::u64 channel_id, blt::u64 msg_id)
+    void guild_fs_manager::message_delete(blt::u64, blt::u64)
     {
     
     }
     
-    void guild_fs_manager::message_update(blt::u64 channel_id, blt::u64 msg_id, std::string_view new_content)
+    void guild_fs_manager::message_update(blt::u64, blt::u64, std::string_view)
     {
     
     }
