@@ -56,12 +56,13 @@ struct user_history_t
 auto make_user_history_table()
 {
     return sql::make_table("user_history",
-                           sql::make_column("userID", &user_history_t::userID, sql::primary_key()),
-                           sql::make_column("time_changed", &user_history_t::time_changed, sql::primary_key()),
+                           sql::make_column("userID", &user_history_t::userID),
+                           sql::make_column("time_changed", &user_history_t::time_changed),
                            sql::make_column("old_username", &user_history_t::old_username),
                            sql::make_column("old_global_nickname", &user_history_t::old_global_nickname),
                            sql::make_column("old_server_name", &user_history_t::old_server_name),
-                           sql::foreign_key(&user_history_t::userID).references(&user_info_t::userID));
+                           sql::foreign_key(&user_history_t::userID).references(&user_info_t::userID),
+                           sql::primary_key(&user_history_t::userID, &user_history_t::time_changed));
 }
 
 using user_history_table_t = decltype(make_user_history_table());
@@ -91,10 +92,11 @@ struct channel_history_t
 auto make_channel_history_table()
 {
     return sql::make_table("channel_history",
-                           sql::make_column("channelID", &channel_history_t::channelID, sql::primary_key()),
-                           sql::make_column("time_changed", &channel_history_t::time_changed, sql::primary_key()),
+                           sql::make_column("channelID", &channel_history_t::channelID),
+                           sql::make_column("time_changed", &channel_history_t::time_changed),
                            sql::make_column("old_channel_name", &channel_history_t::old_channel_name),
-                           sql::foreign_key(&channel_history_t::channelID).references(&channel_info_t::channelID));
+                           sql::foreign_key(&channel_history_t::channelID).references(&channel_info_t::channelID),
+                           sql::primary_key(&channel_history_t::channelID, &channel_history_t::time_changed));
 }
 
 using channel_history_table_t = decltype(make_channel_history_table());
@@ -129,9 +131,10 @@ struct attachment_t
 auto make_attachment_table()
 {
     return sql::make_table("attachments",
-                           sql::make_column("messageID", &attachment_t::messageID, sql::primary_key()),
-                           sql::make_column("url", &attachment_t::url, sql::primary_key()),
-                           sql::foreign_key(&attachment_t::messageID).references(&message_t::messageID));
+                           sql::make_column("messageID", &attachment_t::messageID),
+                           sql::make_column("url", &attachment_t::url),
+                           sql::foreign_key(&attachment_t::messageID).references(&message_t::messageID),
+                           sql::primary_key(&attachment_t::messageID, &attachment_t::url));
 }
 
 using attachment_table_t = decltype(make_attachment_table());
@@ -146,10 +149,11 @@ struct message_edits_t
 auto make_message_edits_table()
 {
     return sql::make_table("message_edits",
-                           sql::make_column("messageID", &message_edits_t::messageID, sql::primary_key()),
-                           sql::make_column("old_content", &message_edits_t::old_content, sql::primary_key()),
-                           sql::make_column("new_content", &message_edits_t::new_content, sql::primary_key()),
-                           sql::foreign_key(&message_edits_t::messageID).references(&message_t::messageID));
+                           sql::make_column("messageID", &message_edits_t::messageID),
+                           sql::make_column("old_content", &message_edits_t::old_content),
+                           sql::make_column("new_content", &message_edits_t::new_content),
+                           sql::foreign_key(&message_edits_t::messageID).references(&message_t::messageID),
+                           sql::primary_key(&message_edits_t::messageID, &message_edits_t::old_content, &message_edits_t::new_content));
 }
 
 using message_edits_table_t = decltype(make_message_edits_table());
@@ -164,11 +168,12 @@ struct message_deletes_t
 auto make_message_deletes_table()
 {
     return sql::make_table("message_deletes",
-                           sql::make_column("messageID", &message_deletes_t::messageID, sql::primary_key()),
-                           sql::make_column("channelID", &message_deletes_t::channelID, sql::primary_key()),
+                           sql::make_column("messageID", &message_deletes_t::messageID),
+                           sql::make_column("channelID", &message_deletes_t::channelID),
                            sql::make_column("content", &message_deletes_t::content),
                            sql::foreign_key(&message_deletes_t::messageID).references(&message_t::messageID),
-                           sql::foreign_key(&message_deletes_t::channelID).references(&channel_info_t::channelID));
+                           sql::foreign_key(&message_deletes_t::channelID).references(&channel_info_t::channelID),
+                           sql::primary_key(&message_deletes_t::messageID, &message_deletes_t::channelID));
 }
 
 using message_deletes_table_t = decltype(make_message_deletes_table());
@@ -185,8 +190,7 @@ struct db_obj
 {
     private:
         blt::u64 guildID;
-        blt::u64 total_channels = 0;
-        std::atomic_uint64_t completed_channels = 0;
+        std::atomic_bool loaded_channels = false;
         database_type db;
         
         void ensure_channel_exists()
@@ -201,7 +205,7 @@ struct db_obj
         
         bool loading_complete()
         {
-            return total_channels != 0 && total_channels == completed_channels.load();
+            return loaded_channels.load();
         }
     
     public:
@@ -212,26 +216,57 @@ struct db_obj
         
         void load(dpp::cluster& bot, const dpp::guild& guild)
         {
-            total_channels = guild.channels.size();
+            bot.channels_get(guild.id, [&bot, this, &guild](const dpp::confirmation_callback_t& event) {
+                if (event.is_error())
+                {
+                    BLT_WARN("Failed to fetch channels for guild %ld", guildID);
+                    BLT_WARN("Cause: %s", event.get_error().human_readable.c_str());
+                    loaded_channels = true;
+                    return;
+                }
+                auto channel_map = event.get<dpp::channel_map>();
+                BLT_INFO("Guild '%s' channel count: %ld", guild.name.c_str(), channel_map.size());
+                
+                for (const auto& channel : channel_map)
+                {
+                    BLT_DEBUG("\tfetched channel id %ld with name '%s'", channel.first, channel.second.name.c_str());
+                }
+                loaded_channels = true;
+            });
             
-            BLT_TRACE("Guild member count: %ld", guild.members.size());
+            while (!loaded_channels.load())
+            {}
+            
             for (const auto& member : guild.members)
             {
-                BLT_TRACE("\t%ld -> %ld", member.first, member.second.user_id);
-            }
-            
-            for (auto channel : guild.channels)
-            {
-                bot.channel_get(channel, [this](const dpp::confirmation_callback_t& event) {
-                    auto channel = event.get<dpp::channel>();
+                BLT_TRACE("\tfetching user %ld -> %ld", member.first, member.second.user_id);
+                bot.user_get(member.first, [member, this](const dpp::confirmation_callback_t& event) {
+                    if (event.is_error())
+                    {
+                        BLT_WARN("Failed to fetch user $ld for guild '%s'", member.first, guildID);
+                        BLT_WARN("Cause: %s", event.get_error().human_readable.c_str());
+                        return;
+                    }
+                    auto user = event.get<dpp::user_identified>();
                     
-                    completed_channels++;
+                    BLT_DEBUG("We got user '%s' with username '%s' and global name '%s'", user.username.c_str(), user.global_name.c_str());
+                });
+                bot.guild_get_member(guildID, member.first, [&guild, member](const dpp::confirmation_callback_t& event) {
+                    if (event.is_error())
+                    {
+                        BLT_WARN("Failed to fetch member %ld for guild %ld", member.first, guild.id);
+                        BLT_WARN("Cause: %s", event.get_error().human_readable.c_str());
+                        return;
+                    }
+                    auto user = event.get<dpp::guild_member>();
+                    
+                    BLT_DEBUG("Member of guild '%s' with nickname '%s'", guild.name.c_str(), user.get_nickname().c_str());
                 });
             }
             
             while (!loading_complete())
             {}
-            BLT_TRACE("Finished loading guild '%s'", guild.name.c_str());
+            BLT_DEBUG("Finished loading guild '%s'", guild.name.c_str());
         }
         
         void commit(const user_info_t& edited)
@@ -311,8 +346,9 @@ int main(int argc, const char** argv)
     
     auto args = parser.parse_args(argc, argv);
     path = args.get<std::string>("path");
+    std::filesystem::create_directories(path);
     
-    dpp::cluster bot(args.get<std::string>("token"), dpp::i_default_intents | dpp::i_message_content | dpp::i_all_intents);
+    dpp::cluster bot(args.get<std::string>("token"), dpp::i_default_intents | dpp::i_message_content | dpp::i_all_intents | dpp::i_guild_members);
     
     bot.on_ready([&bot](const dpp::ready_t& event) {
         if (dpp::run_once<struct fetch_active_guilds>())
@@ -321,6 +357,12 @@ int main(int argc, const char** argv)
             for (blt::u64 server : event.guilds)
             {
                 bot.guild_get(server, [&bot, server](const dpp::confirmation_callback_t& event) {
+                    if (event.is_error())
+                    {
+                        BLT_WARN("Failed to fetch for guild %ld", server);
+                        BLT_WARN("Cause: %s", event.get_error().human_readable.c_str());
+                        return;
+                    }
                     BLT_INFO("Fetched data for %ld ('%s')", server, event.get<dpp::guild>().name.c_str());
                     auto& db = get(server);
                     
