@@ -145,6 +145,7 @@ namespace db
     
     auto make_message_table()
     {
+        using namespace sqlite_orm;
         return make_table("messages",
                                make_column("messageID", &message_t::messageID, primary_key()),
                                make_column("channelID", &message_t::channelID),

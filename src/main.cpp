@@ -27,7 +27,7 @@ struct db_obj
         std::queue<blt::u64> user_load_queue;
         std::mutex user_load_queue_mutex;
         database_type db;
-        std::thread* thread;
+        std::thread* thread = nullptr;
     
     public:
         explicit db_obj(blt::u64 guildID, const std::string& path): guildID(guildID), db(make_database(path + "/" + std::to_string(guildID) + "/"))
