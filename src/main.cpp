@@ -7,184 +7,14 @@
 #include <sqlite_orm/sqlite_orm.h>
 #include "blt/std/types.h"
 #include "blt/std/utility.h"
+#include <data_structs.h>
 #include <curl/curl.h>
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
 
 namespace sql = sqlite_orm;
-
-struct server_info_t
-{
-    blt::u32 member_count;
-    std::string name;
-    std::string description;
-    std::string icon;
-    std::string splash;
-    std::string discovery_splash;
-    std::string banner;
-};
-
-struct user_info_t
-{
-    blt::u64 userID;
-    std::string username;
-    std::string global_nickname;
-    std::string server_name;
-};
-
-auto make_user_table()
-{
-    return sql::make_table("users",
-                           sql::make_column("userID", &user_info_t::userID, sql::primary_key()),
-                           sql::make_column("username", &user_info_t::username),
-                           sql::make_column("global_nickname", &user_info_t::global_nickname),
-                           sql::make_column("server_name", &user_info_t::server_name));
-}
-
-using user_table_t = decltype(make_user_table());
-
-struct user_history_t
-{
-    blt::u64 userID;
-    blt::u64 time_changed;
-    std::string old_username;
-    std::string old_global_nickname;
-    std::string old_server_name;
-};
-
-auto make_user_history_table()
-{
-    return sql::make_table("user_history",
-                           sql::make_column("userID", &user_history_t::userID),
-                           sql::make_column("time_changed", &user_history_t::time_changed),
-                           sql::make_column("old_username", &user_history_t::old_username),
-                           sql::make_column("old_global_nickname", &user_history_t::old_global_nickname),
-                           sql::make_column("old_server_name", &user_history_t::old_server_name),
-                           sql::foreign_key(&user_history_t::userID).references(&user_info_t::userID),
-                           sql::primary_key(&user_history_t::userID, &user_history_t::time_changed));
-}
-
-using user_history_table_t = decltype(make_user_history_table());
-
-struct channel_info_t
-{
-    blt::u64 channelID;
-    std::string channel_name;
-};
-
-auto make_channel_table()
-{
-    return sql::make_table("channels",
-                           sql::make_column("channelID", &channel_info_t::channelID, sql::primary_key()),
-                           sql::make_column("channel_name", &channel_info_t::channel_name));
-}
-
-using channel_table_t = decltype(make_channel_table());
-
-struct channel_history_t
-{
-    blt::u64 channelID;
-    blt::u64 time_changed;
-    std::string old_channel_name;
-};
-
-auto make_channel_history_table()
-{
-    return sql::make_table("channel_history",
-                           sql::make_column("channelID", &channel_history_t::channelID),
-                           sql::make_column("time_changed", &channel_history_t::time_changed),
-                           sql::make_column("old_channel_name", &channel_history_t::old_channel_name),
-                           sql::foreign_key(&channel_history_t::channelID).references(&channel_info_t::channelID),
-                           sql::primary_key(&channel_history_t::channelID, &channel_history_t::time_changed));
-}
-
-using channel_history_table_t = decltype(make_channel_history_table());
-
-struct message_t
-{
-    blt::u64 messageID;
-    blt::u64 channelID;
-    blt::u64 userID;
-    std::string content;
-};
-
-auto make_message_table()
-{
-    return sql::make_table("messages",
-                           sql::make_column("messageID", &message_t::messageID, sql::primary_key()),
-                           sql::make_column("channelID", &message_t::channelID),
-                           sql::make_column("userID", &message_t::userID),
-                           sql::make_column("content", &message_t::content),
-                           sql::foreign_key(&message_t::channelID).references(&channel_info_t::channelID),
-                           sql::foreign_key(&message_t::userID).references(&user_info_t::userID));
-}
-
-using message_table_t = decltype(make_message_table());
-
-struct attachment_t
-{
-    blt::u64 messageID;
-    std::string url;
-};
-
-auto make_attachment_table()
-{
-    return sql::make_table("attachments",
-                           sql::make_column("messageID", &attachment_t::messageID),
-                           sql::make_column("url", &attachment_t::url),
-                           sql::foreign_key(&attachment_t::messageID).references(&message_t::messageID),
-                           sql::primary_key(&attachment_t::messageID, &attachment_t::url));
-}
-
-using attachment_table_t = decltype(make_attachment_table());
-
-struct message_edits_t
-{
-    blt::u64 messageID;
-    std::string old_content;
-    std::string new_content;
-};
-
-auto make_message_edits_table()
-{
-    return sql::make_table("message_edits",
-                           sql::make_column("messageID", &message_edits_t::messageID),
-                           sql::make_column("old_content", &message_edits_t::old_content),
-                           sql::make_column("new_content", &message_edits_t::new_content),
-                           sql::foreign_key(&message_edits_t::messageID).references(&message_t::messageID),
-                           sql::primary_key(&message_edits_t::messageID, &message_edits_t::old_content, &message_edits_t::new_content));
-}
-
-using message_edits_table_t = decltype(make_message_edits_table());
-
-struct message_deletes_t
-{
-    blt::u64 messageID;
-    blt::u64 channelID;
-    std::string content;
-};
-
-auto make_message_deletes_table()
-{
-    return sql::make_table("message_deletes",
-                           sql::make_column("messageID", &message_deletes_t::messageID),
-                           sql::make_column("channelID", &message_deletes_t::channelID),
-                           sql::make_column("content", &message_deletes_t::content),
-                           sql::foreign_key(&message_deletes_t::messageID).references(&message_t::messageID),
-                           sql::foreign_key(&message_deletes_t::channelID).references(&channel_info_t::channelID),
-                           sql::primary_key(&message_deletes_t::messageID, &message_deletes_t::channelID));
-}
-
-using message_deletes_table_t = decltype(make_message_deletes_table());
-
-auto make_database(std::string path)
-{
-    return sql::make_storage(std::move(path), make_user_table(), make_user_history_table(), make_channel_table(), make_channel_history_table(),
-                             make_message_table(), make_attachment_table(), make_message_edits_table(), make_message_deletes_table());
-}
-
-using database_type = decltype(make_database(""));
+using namespace db;
 
 struct db_obj
 {
@@ -198,16 +28,6 @@ struct db_obj
         std::mutex user_load_queue_mutex;
         database_type db;
         std::thread* thread;
-        
-        void ensure_channel_exists()
-        {
-        
-        }
-        
-        void ensure_user_exists()
-        {
-        
-        }
     
     public:
         explicit db_obj(blt::u64 guildID, const std::string& path): guildID(guildID), db(make_database(path + "/" + std::to_string(guildID) + "/"))
@@ -444,6 +264,10 @@ int main(int argc, const char** argv)
     
     bot.on_user_update(wait_wrapper<dpp::user_update_t>([&bot](const dpp::user_update_t& event) {
         BLT_INFO("User '%s' updated in some way; global name: '%s'", event.updated.username.c_str(), event.updated.global_name.c_str());
+        for (const auto& guild : databases)
+        {
+        
+        }
     }));
     
     bot.on_guild_member_update(wait_wrapper<dpp::guild_member_update_t>([&bot](const dpp::guild_member_update_t& event) {
