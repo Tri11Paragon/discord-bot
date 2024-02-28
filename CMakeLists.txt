@@ -5,7 +5,12 @@ option(ENABLE_ADDRSAN "Enable the address sanitizer" OFF)
 option(ENABLE_UBSAN "Enable the ub sanitizer" OFF)
 option(ENABLE_TSAN "Enable the thread data race sanitizer" OFF)
 
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 17)
+
+#set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
+#set(BUILD_SHARED_LIBS OFF)
+#set(POSITION_INDEPENDENT_CODE ON)
 
 add_compile_options(-march=native)
 
@@ -14,7 +19,6 @@ set(SQLITE_ORM_ENABLE_CXX_17 ON)
 add_subdirectory(libs/blt)
 add_subdirectory(libs/DPP-10.0.29)
 add_subdirectory(libs/sqlite_orm-1.8.2)
-add_subdirectory(libs/SQLiteCpp-3.3.1)
 
 find_package(CURL)
 
@@ -26,11 +30,10 @@ add_executable(discord_bot ${PROJECT_BUILD_FILES})
 target_compile_options(discord_bot PUBLIC -Wall -Wpedantic -Wno-comment -march=native)
 target_link_options(discord_bot PUBLIC -Wall -Wpedantic -Wno-comment)
 
-target_link_libraries(discord_bot PUBLIC BLT)
+target_link_libraries(discord_bot PUBLIC curl)
 target_link_libraries(discord_bot PUBLIC dpp)
 target_link_libraries(discord_bot PUBLIC sqlite_orm)
-target_link_libraries(discord_bot PUBLIC curl)
-target_link_libraries(discord_bot PUBLIC SQLiteCpp sqlite3 pthread dl)
+target_link_libraries(discord_bot PUBLIC BLT)
 
 if (${ENABLE_ADDRSAN} MATCHES ON)
     target_compile_options(discord_bot PRIVATE -fsanitize=address)
