@@ -37,6 +37,16 @@ struct db_obj
         
         void load(dpp::cluster& bot, const dpp::guild& guild)
         {
+            server_info_t server_inf;
+            server_inf.name = guild.name;
+            server_inf.member_count = guild.member_count;
+            server_inf.icon = guild.get_icon_url();
+            server_inf.discovery_splash = guild.get_discovery_splash_url();
+            server_inf.description = guild.description;
+            server_inf.banner = guild.get_banner_url();
+            server_inf.splash = guild.get_splash_url();
+            commit(server_inf);
+            
             bot.channels_get(guild.id, [this, guild, &bot](const dpp::confirmation_callback_t& event) {
                 if (event.is_error())
                 {
@@ -53,6 +63,10 @@ struct db_obj
                     if (channel.second.is_category())
                         continue;
                     BLT_DEBUG("\tFetched channel id %ld with name '%s'", channel.first, channel.second.name.c_str());
+                    channel_info_t channels;
+                    channels.channel_name = channel.second.name;
+                    channels.channelID = channel.first;
+                    commit(channels);
                 }
                 loaded_channels = true;
                 BLT_INFO("Finished loading channels for guild '%s'", guild.name.c_str());
@@ -125,6 +139,11 @@ struct db_obj
         
         }
         
+        void commit(const server_info_t& deleted)
+        {
+        
+        }
+        
         void process_queue(dpp::cluster& bot)
         {
             thread = new std::thread([this, &bot]() {
@@ -164,6 +183,12 @@ struct db_obj
                             return;
                         }
                         auto user = event.get<dpp::user_identified>();
+                        
+                        user_info_t user_inf;
+                        user_inf.username = user.username;
+                        user_inf.global_nickname = user.global_name;
+                        user_inf.userID = user.id;
+                        commit(user_inf);
                         
                         BLT_DEBUG("We got user '%s' with global name '%s'", user.username.c_str(), user.global_name.c_str());
                         loaded_users++;
@@ -266,25 +291,41 @@ int main(int argc, const char** argv)
         BLT_INFO("User '%s' updated in some way; global name: '%s'", event.updated.username.c_str(), event.updated.global_name.c_str());
         for (const auto& guild : databases)
         {
-        
+            user_info_t info;
+            info.userID = event.updated.id;
+            info.username = event.updated.username;
+            info.global_nickname = event.updated.global_name;
+            guild.second->commit(info);
         }
     }));
     
     bot.on_guild_member_update(wait_wrapper<dpp::guild_member_update_t>([&bot](const dpp::guild_member_update_t& event) {
-    
+        user_info_t info;
+        info.userID = event.updated.user_id;
+        info.server_name = event.updated.get_nickname();
+        get(event.updated.guild_id).commit(info);
     }));
     
     bot.on_message_delete(wait_wrapper<dpp::message_delete_t>([&bot](const dpp::message_delete_t& event) {
         BLT_DEBUG("Message %ld deleted content in %ld", event.id, event.channel_id);
+        message_deletes_t deleted;
+        deleted.channelID = event.channel_id;
+        deleted.messageID = event.id;
+        get(event.guild_id).commit(deleted);
     }));
     
     bot.on_message_delete_bulk(wait_wrapper<dpp::message_delete_bulk_t>([&bot](const dpp::message_delete_bulk_t& event) {
-    
+        BLT_INFO("Bulk delete!");
+        for (auto v : event.deleted)
+            BLT_TRACE("\tBulk Delete: %ld", v);
     }));
     
     bot.on_message_update(wait_wrapper<dpp::message_update_t>([&bot](const dpp::message_update_t& event) {
         auto& storage = get(event.msg.guild_id);
         
+        message_edits_t edited;
+        edited.messageID = event.msg.id;
+        edited.new_content = event.msg.content;
         BLT_INFO("%ld (from user %ld in channel %ld ['%s']) -> '%s'", event.msg.id, event.msg.author.id, event.msg.channel_id,
                  event.msg.author.username.c_str(), event.msg.content.c_str());
     }));
