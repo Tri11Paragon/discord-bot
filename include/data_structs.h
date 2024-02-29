@@ -55,6 +55,7 @@ namespace db
     struct channel_info_t
     {
         blt::u64 channelID;
+        std::string channel_topic;
         std::string channel_name;
     };
     
@@ -76,6 +77,9 @@ namespace db
     struct attachment_t
     {
         blt::u64 messageID;
+        blt::u64 attachmentID;
+        std::string filename;
+        std::string description;
         std::string url;
     };
     
@@ -125,6 +129,7 @@ namespace db
         using namespace sqlite_orm;
         return make_table("channels",
                                make_column("channelID", &channel_info_t::channelID, primary_key()),
+                               make_column("channel_topic", &channel_info_t::channel_topic),
                                make_column("channel_name", &channel_info_t::channel_name));
     }
     
@@ -162,9 +167,12 @@ namespace db
         using namespace sqlite_orm;
         return make_table("attachments",
                                make_column("messageID", &attachment_t::messageID),
+                               make_column("attachmentID", &attachment_t::attachmentID),
+                               make_column("filename", &attachment_t::filename),
+                               make_column("description", &attachment_t::description),
                                make_column("url", &attachment_t::url),
                                foreign_key(&attachment_t::messageID).references(&message_t::messageID),
-                               primary_key(&attachment_t::messageID, &attachment_t::url));
+                               primary_key(&attachment_t::messageID, &attachment_t::attachmentID));
     }
     
     using attachment_table_t = decltype(make_attachment_table());

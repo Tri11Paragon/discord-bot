@@ -65,6 +65,7 @@ struct db_obj
                     BLT_DEBUG("\tFetched channel id %ld with name '%s'", channel.first, channel.second.name.c_str());
                     channel_info_t channels;
                     channels.channel_name = channel.second.name;
+                    channels.channel_topic = channel.second.topic;
                     channels.channelID = channel.first;
                     commit(channels);
                 }
@@ -147,7 +148,8 @@ struct db_obj
         void process_queue(dpp::cluster& bot)
         {
             thread = new std::thread([this, &bot]() {
-                while (user_count != loaded_users.load())
+//                while (user_count != loaded_users.load())
+                while (true)
                 {
                     std::this_thread::sleep_for(std::chrono::milliseconds(50));
                     blt::u64 member = 0;
@@ -195,6 +197,12 @@ struct db_obj
                     });
                 }
             });
+        }
+        
+        inline void queue_user(blt::u64 userID)
+        {
+            std::scoped_lock lock(user_load_queue_mutex);
+            user_load_queue.push(userID);
         }
         
         bool loading_complete()
@@ -303,7 +311,18 @@ int main(int argc, const char** argv)
         user_info_t info;
         info.userID = event.updated.user_id;
         info.server_name = event.updated.get_nickname();
-        get(event.updated.guild_id).commit(info);
+        auto& storage = get(event.updated.guild_id);
+        storage.commit(info);
+        storage.queue_user(event.updated.user_id);
+    }));
+    
+    bot.on_guild_member_add(wait_wrapper<dpp::guild_member_add_t>([](const dpp::guild_member_add_t& event) {
+        user_info_t info;
+        info.userID = event.added.user_id;
+        info.server_name = event.added.get_nickname();
+        auto& storage = get(event.added.guild_id);
+        storage.commit(info);
+        storage.queue_user(event.added.user_id);
     }));
     
     bot.on_message_delete(wait_wrapper<dpp::message_delete_t>([&bot](const dpp::message_delete_t& event) {
@@ -316,16 +335,28 @@ int main(int argc, const char** argv)
     
     bot.on_message_delete_bulk(wait_wrapper<dpp::message_delete_bulk_t>([&bot](const dpp::message_delete_bulk_t& event) {
         BLT_INFO("Bulk delete!");
+        if (event.deleting_channel == nullptr || event.deleting_guild == nullptr)
+        {
+            BLT_WARN("Unable to handle bulk delete, guild or channel is not in cache!");
+            BLT_WARN("Raw String:");
+            BLT_WARN("\t%s", event.raw_event.c_str());
+            return;
+        }
         for (auto v : event.deleted)
+        {
             BLT_TRACE("\tBulk Delete: %ld", v);
+            message_deletes_t deleted;
+            deleted.messageID = v;
+            deleted.channelID = event.deleting_channel->id;
+            get(event.deleting_guild->id).commit(deleted);
+        }
     }));
     
     bot.on_message_update(wait_wrapper<dpp::message_update_t>([&bot](const dpp::message_update_t& event) {
-        auto& storage = get(event.msg.guild_id);
-        
         message_edits_t edited;
         edited.messageID = event.msg.id;
         edited.new_content = event.msg.content;
+        get(event.msg.guild_id).commit(edited);
         BLT_INFO("%ld (from user %ld in channel %ld ['%s']) -> '%s'", event.msg.id, event.msg.author.id, event.msg.channel_id,
                  event.msg.author.username.c_str(), event.msg.content.c_str());
     }));
@@ -334,21 +365,55 @@ int main(int argc, const char** argv)
         if (event.msg.id == bot.me.id)
             return;
         if (blt::string::starts_with(event.msg.content, "!dump"))
+        {}
+        auto& storage = get(event.msg.guild_id);
+        message_t message;
+        message.messageID = event.msg.id;
+        message.channelID = event.msg.channel_id;
+        message.userID = event.msg.author.id;
+        message.content = event.msg.content;
+        storage.commit(message);
+        for (const dpp::attachment& attach : event.msg.attachments)
         {
-        
+            attachment_t attachment;
+            attachment.messageID = event.msg.id;
+            attachment.attachmentID = attach.id;
+            attachment.url = attach.url;
+            attachment.filename = attach.filename;
+            attachment.description = attach.description;
+            storage.commit(attachment);
         }
-//        auto& storage = get(event.msg.guild_id);
-//        storage.messages.push_back({
-//                                           event.msg.id,
-//                                           event.msg.channel_id,
-//                                           event.msg.author.id,
-//                                           event.msg.content
-//                                   });
-//
-//        for (const dpp::attachment& attach : event.msg.attachments)
-//        {
-//            storage.attachments.push_back({event.msg.id, attach.url});
-//        }
+    }));
+    
+    bot.on_channel_create(wait_wrapper<dpp::channel_create_t>([](const dpp::channel_create_t& event) {
+        if (event.created == nullptr)
+        {
+            BLT_WARN("Unable to handle channel creation, channel is not in cache!");
+            BLT_WARN("Raw String:");
+            BLT_WARN("\t%s", event.raw_event.c_str());
+            return;
+        }
+        channel_info_t channel;
+        channel.channelID = event.created->id;
+        channel.channel_topic = event.created->topic;
+        channel.channel_name = event.created->name;
+        get(event.created->guild_id).commit(channel);
+    }));
+    
+    bot.on_channel_delete(wait_wrapper<dpp::channel_delete_t>([](const dpp::channel_delete_t& event) {
+        channel_info_t channel;
+        channel.channelID = event.deleted.id;
+        channel.channel_name = event.deleted.name;
+        channel.channel_topic = event.deleted.topic;
+        get(event.deleted.guild_id).commit(channel);
+    }));
+    
+    bot.on_channel_update(wait_wrapper<dpp::channel_update_t>([](const dpp::channel_update_t& event) {
+        channel_info_t channel;
+        channel.channelID = event.updated->guild_id;
+        channel.channel_name = event.updated->name;
+        channel.channel_topic = event.updated->topic;
+        get(event.updated->guild_id).commit(channel);
     }));
     
     bot.start(dpp::st_wait);
