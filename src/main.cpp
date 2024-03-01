@@ -7,6 +7,7 @@
 #include <sqlite_orm/sqlite_orm.h>
 #include "blt/std/types.h"
 #include "blt/std/utility.h"
+#include "blt/std/time.h"
 #include <data_structs.h>
 #include <curl/curl.h>
 #include <atomic>
@@ -102,12 +103,28 @@ struct db_obj
         
         void commit(const user_info_t& edited)
         {
-        
+            auto existing_user = db.select(sql::object<user_info_t>(), sql::where(sql::c(&user_info_t::userID) == edited.userID));
+            
+            if (!existing_user.empty())
+            {
+                for (const auto& v : existing_user)
+                {
+                    user_history_t history;
+                    history.userID = v.userID;
+                    history.old_username = v.username;
+                    history.old_global_nickname = v.global_nickname;
+                    history.old_server_name = v.server_name;
+                    history.time_changed = blt::system::getCurrentTimeMilliseconds();
+                    commit(history);
+                }
+            }
+            
+            db.replace(edited);
         }
         
         void commit(const user_history_t& edited)
         {
-        
+            db.insert(edited);
         }
         
         void commit(const channel_info_t& channel)
@@ -117,7 +134,7 @@ struct db_obj
         
         void commit(const channel_history_t& channel)
         {
-        
+            db.insert(channel);
         }
         
         void commit(const message_t& message)
