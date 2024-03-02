@@ -64,6 +64,7 @@ namespace db
         blt::u64 channelID;
         blt::u64 time_changed;
         std::string old_channel_name;
+        std::string old_channel_topic;
     };
     
     struct message_t
@@ -94,6 +95,7 @@ namespace db
     {
         blt::u64 messageID;
         blt::u64 channelID;
+        blt::u64 userID;
         std::string content;
     };
     
@@ -159,6 +161,7 @@ namespace db
                           make_column("channelID", &channel_history_t::channelID),
                           make_column("time_changed", &channel_history_t::time_changed),
                           make_column("old_channel_name", &channel_history_t::old_channel_name),
+                          make_column("old_channel_topic", &channel_history_t::old_channel_topic),
                           foreign_key(&channel_history_t::channelID).references(&channel_info_t::channelID),
                           primary_key(&channel_history_t::channelID, &channel_history_t::time_changed));
     }
@@ -213,10 +216,12 @@ namespace db
         return make_table("message_deletes",
                           make_column("messageID", &message_deletes_t::messageID),
                           make_column("channelID", &message_deletes_t::channelID),
+                          make_column("userID", &message_deletes_t::userID),
                           make_column("content", &message_deletes_t::content),
                           foreign_key(&message_deletes_t::messageID).references(&message_t::messageID),
                           foreign_key(&message_deletes_t::channelID).references(&channel_info_t::channelID),
-                          primary_key(&message_deletes_t::messageID, &message_deletes_t::channelID));
+                          foreign_key(&message_deletes_t::userID).references(&user_info_t::userID),
+                          primary_key(&message_deletes_t::messageID, &message_deletes_t::channelID, &message_deletes_t::userID));
     }
     
     using message_deletes_table_t = decltype(make_message_deletes_table());

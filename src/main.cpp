@@ -130,7 +130,24 @@ struct db_obj
         
         void commit(const channel_info_t& channel)
         {
-        
+            using namespace sql;
+            auto existing_channel = db
+                    .select(object<channel_info_t>(), from<channel_info_t>(), where(c(&channel_info_t::channelID) == channel.channelID));
+            
+            if (!existing_channel.empty())
+            {
+                for (const auto& v : existing_channel)
+                {
+                    channel_history_t history;
+                    history.channelID = v.channelID;
+                    history.old_channel_name = v.channel_name;
+                    history.old_channel_topic = v.channel_topic;
+                    history.time_changed = blt::system::getCurrentTimeMilliseconds();
+                    commit(history);
+                }
+            }
+            
+            db.replace(channel);
         }
         
         void commit(const channel_history_t& channel)
@@ -153,8 +170,21 @@ struct db_obj
             db.insert(edited);
         }
         
-        void commit(const message_deletes_t& deleted)
+        void commit(message_deletes_t& deleted)
         {
+            using namespace sql;
+            auto message_content = db.select(columns(&message_t::content, &message_t::userID), from<message_t>(),
+                                             where(c(&message_t::messageID) == deleted.messageID));
+            
+            if (message_content.empty())
+            {
+                BLT_WARN("Unable to delete message when no message exists!");
+                return;
+            }
+            
+            deleted.content = std::get<0>(message_content[0]);
+            deleted.userID = std::get<1>(message_content[0]);
+            
             db.insert(deleted);
         }
         
