@@ -103,7 +103,8 @@ struct db_obj
         
         void commit(const user_info_t& edited)
         {
-            auto existing_user = db.select(sql::object<user_info_t>(), sql::where(sql::c(&user_info_t::userID) == edited.userID));
+            auto existing_user = db.select(sql::object<user_info_t>(), sql::from<user_info_t>(),
+                                           sql::where(sql::c(&user_info_t::userID) == edited.userID));
             
             if (!existing_user.empty())
             {
@@ -149,17 +150,27 @@ struct db_obj
         
         void commit(const message_edits_t& edited)
         {
-        
+            db.insert(edited);
         }
         
         void commit(const message_deletes_t& deleted)
         {
-        
+            db.insert(deleted);
         }
         
-        void commit(const server_info_t& deleted)
+        void commit(const server_info_t& server)
         {
-        
+            using namespace sql;
+            auto data = db.select(columns(&server_info_t::name), from<server_info_t>(),
+                                  where((c(&server_info_t::member_count) == server.member_count) &&
+                                        (c(&server_info_t::name) == server.name) &&
+                                        (c(&server_info_t::description) == server.description) &&
+                                        (c(&server_info_t::icon) == server.icon) &&
+                                        (c(&server_info_t::splash) == server.splash) &&
+                                        (c(&server_info_t::discovery_splash) == server.discovery_splash) &&
+                                        (c(&server_info_t::banner) == server.banner)));
+            if (data.empty())
+                db.insert(server);
         }
         
         void process_queue(dpp::cluster& bot)

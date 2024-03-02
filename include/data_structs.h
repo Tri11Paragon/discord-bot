@@ -97,14 +97,31 @@ namespace db
         std::string content;
     };
     
+    auto make_server_info_table()
+    {
+        using namespace sqlite_orm;
+        return make_table("server_info",
+                          make_column("member_count", &server_info_t::member_count),
+                          make_column("name", &server_info_t::name),
+                          make_column("description", &server_info_t::description),
+                          make_column("icon", &server_info_t::icon),
+                          make_column("splash", &server_info_t::splash),
+                          make_column("discovery_splash", &server_info_t::discovery_splash),
+                          make_column("banner", &server_info_t::banner),
+                          primary_key(&server_info_t::member_count, &server_info_t::name, &server_info_t::description, &server_info_t::icon,
+                                      &server_info_t::splash, &server_info_t::discovery_splash, &server_info_t::banner));
+    }
+    
+    using server_info_table_t = decltype(make_server_info_table());
+    
     auto make_user_table()
     {
         using namespace sqlite_orm;
         return make_table("users",
-                               make_column("userID", &user_info_t::userID, primary_key()),
-                               make_column("username", &user_info_t::username),
-                               make_column("global_nickname", &user_info_t::global_nickname),
-                               make_column("server_name", &user_info_t::server_name));
+                          make_column("userID", &user_info_t::userID, primary_key()),
+                          make_column("username", &user_info_t::username),
+                          make_column("global_nickname", &user_info_t::global_nickname),
+                          make_column("server_name", &user_info_t::server_name));
     }
     
     using user_table_t = decltype(make_user_table());
@@ -113,13 +130,13 @@ namespace db
     {
         using namespace sqlite_orm;
         return make_table("user_history",
-                               make_column("userID", &user_history_t::userID),
-                               make_column("time_changed", &user_history_t::time_changed),
-                               make_column("old_username", &user_history_t::old_username),
-                               make_column("old_global_nickname", &user_history_t::old_global_nickname),
-                               make_column("old_server_name", &user_history_t::old_server_name),
-                               foreign_key(&user_history_t::userID).references(&user_info_t::userID),
-                               primary_key(&user_history_t::userID, &user_history_t::time_changed));
+                          make_column("userID", &user_history_t::userID),
+                          make_column("time_changed", &user_history_t::time_changed),
+                          make_column("old_username", &user_history_t::old_username),
+                          make_column("old_global_nickname", &user_history_t::old_global_nickname),
+                          make_column("old_server_name", &user_history_t::old_server_name),
+                          foreign_key(&user_history_t::userID).references(&user_info_t::userID),
+                          primary_key(&user_history_t::userID, &user_history_t::time_changed));
     }
     
     using user_history_table_t = decltype(make_user_history_table());
@@ -128,9 +145,9 @@ namespace db
     {
         using namespace sqlite_orm;
         return make_table("channels",
-                               make_column("channelID", &channel_info_t::channelID, primary_key()),
-                               make_column("channel_topic", &channel_info_t::channel_topic),
-                               make_column("channel_name", &channel_info_t::channel_name));
+                          make_column("channelID", &channel_info_t::channelID, primary_key()),
+                          make_column("channel_topic", &channel_info_t::channel_topic),
+                          make_column("channel_name", &channel_info_t::channel_name));
     }
     
     using channel_table_t = decltype(make_channel_table());
@@ -139,11 +156,11 @@ namespace db
     {
         using namespace sqlite_orm;
         return make_table("channel_history",
-                               make_column("channelID", &channel_history_t::channelID),
-                               make_column("time_changed", &channel_history_t::time_changed),
-                               make_column("old_channel_name", &channel_history_t::old_channel_name),
-                               foreign_key(&channel_history_t::channelID).references(&channel_info_t::channelID),
-                               primary_key(&channel_history_t::channelID, &channel_history_t::time_changed));
+                          make_column("channelID", &channel_history_t::channelID),
+                          make_column("time_changed", &channel_history_t::time_changed),
+                          make_column("old_channel_name", &channel_history_t::old_channel_name),
+                          foreign_key(&channel_history_t::channelID).references(&channel_info_t::channelID),
+                          primary_key(&channel_history_t::channelID, &channel_history_t::time_changed));
     }
     
     using channel_history_table_t = decltype(make_channel_history_table());
@@ -152,12 +169,12 @@ namespace db
     {
         using namespace sqlite_orm;
         return make_table("messages",
-                               make_column("messageID", &message_t::messageID, primary_key()),
-                               make_column("channelID", &message_t::channelID),
-                               make_column("userID", &message_t::userID),
-                               make_column("content", &message_t::content),
-                               foreign_key(&message_t::channelID).references(&channel_info_t::channelID),
-                               foreign_key(&message_t::userID).references(&user_info_t::userID));
+                          make_column("messageID", &message_t::messageID, primary_key()),
+                          make_column("channelID", &message_t::channelID),
+                          make_column("userID", &message_t::userID),
+                          make_column("content", &message_t::content),
+                          foreign_key(&message_t::channelID).references(&channel_info_t::channelID),
+                          foreign_key(&message_t::userID).references(&user_info_t::userID));
     }
     
     using message_table_t = decltype(make_message_table());
@@ -166,13 +183,13 @@ namespace db
     {
         using namespace sqlite_orm;
         return make_table("attachments",
-                               make_column("messageID", &attachment_t::messageID),
-                               make_column("attachmentID", &attachment_t::attachmentID),
-                               make_column("filename", &attachment_t::filename),
-                               make_column("description", &attachment_t::description),
-                               make_column("url", &attachment_t::url),
-                               foreign_key(&attachment_t::messageID).references(&message_t::messageID),
-                               primary_key(&attachment_t::messageID, &attachment_t::attachmentID));
+                          make_column("messageID", &attachment_t::messageID),
+                          make_column("attachmentID", &attachment_t::attachmentID),
+                          make_column("filename", &attachment_t::filename),
+                          make_column("description", &attachment_t::description),
+                          make_column("url", &attachment_t::url),
+                          foreign_key(&attachment_t::messageID).references(&message_t::messageID),
+                          primary_key(&attachment_t::messageID, &attachment_t::attachmentID));
     }
     
     using attachment_table_t = decltype(make_attachment_table());
@@ -181,11 +198,11 @@ namespace db
     {
         using namespace sqlite_orm;
         return make_table("message_edits",
-                               make_column("messageID", &message_edits_t::messageID),
-                               make_column("old_content", &message_edits_t::old_content),
-                               make_column("new_content", &message_edits_t::new_content),
-                               foreign_key(&message_edits_t::messageID).references(&message_t::messageID),
-                               primary_key(&message_edits_t::messageID, &message_edits_t::old_content, &message_edits_t::new_content));
+                          make_column("messageID", &message_edits_t::messageID),
+                          make_column("old_content", &message_edits_t::old_content),
+                          make_column("new_content", &message_edits_t::new_content),
+                          foreign_key(&message_edits_t::messageID).references(&message_t::messageID),
+                          primary_key(&message_edits_t::messageID, &message_edits_t::old_content, &message_edits_t::new_content));
     }
     
     using message_edits_table_t = decltype(make_message_edits_table());
@@ -194,12 +211,12 @@ namespace db
     {
         using namespace sqlite_orm;
         return make_table("message_deletes",
-                               make_column("messageID", &message_deletes_t::messageID),
-                               make_column("channelID", &message_deletes_t::channelID),
-                               make_column("content", &message_deletes_t::content),
-                               foreign_key(&message_deletes_t::messageID).references(&message_t::messageID),
-                               foreign_key(&message_deletes_t::channelID).references(&channel_info_t::channelID),
-                               primary_key(&message_deletes_t::messageID, &message_deletes_t::channelID));
+                          make_column("messageID", &message_deletes_t::messageID),
+                          make_column("channelID", &message_deletes_t::channelID),
+                          make_column("content", &message_deletes_t::content),
+                          foreign_key(&message_deletes_t::messageID).references(&message_t::messageID),
+                          foreign_key(&message_deletes_t::channelID).references(&channel_info_t::channelID),
+                          primary_key(&message_deletes_t::messageID, &message_deletes_t::channelID));
     }
     
     using message_deletes_table_t = decltype(make_message_deletes_table());
@@ -208,7 +225,8 @@ namespace db
     {
         using namespace sqlite_orm;
         return make_storage(std::move(path), make_user_table(), make_user_history_table(), make_channel_table(), make_channel_history_table(),
-                                 make_message_table(), make_attachment_table(), make_message_edits_table(), make_message_deletes_table());
+                            make_message_table(), make_attachment_table(), make_message_edits_table(), make_message_deletes_table(),
+                            make_server_info_table());
     }
     
     using database_type = decltype(make_database(""));
