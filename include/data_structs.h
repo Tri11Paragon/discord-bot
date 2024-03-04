@@ -26,8 +26,8 @@ namespace db
 {
     struct server_info_t
     {
-        blt::u32 member_count;
         std::string name;
+        std::string member_count;
         std::string description;
         std::string icon;
         std::string splash;
@@ -103,14 +103,14 @@ namespace db
     {
         using namespace sqlite_orm;
         return make_table("server_info",
-                          make_column("member_count", &server_info_t::member_count),
                           make_column("name", &server_info_t::name),
+                          make_column("member_count", &server_info_t::member_count),
                           make_column("description", &server_info_t::description),
                           make_column("icon", &server_info_t::icon),
                           make_column("splash", &server_info_t::splash),
                           make_column("discovery_splash", &server_info_t::discovery_splash),
                           make_column("banner", &server_info_t::banner),
-                          primary_key(&server_info_t::member_count, &server_info_t::name, &server_info_t::description, &server_info_t::icon,
+                          primary_key(&server_info_t::name, &server_info_t::member_count, &server_info_t::description, &server_info_t::icon,
                                       &server_info_t::splash, &server_info_t::discovery_splash, &server_info_t::banner));
     }
     

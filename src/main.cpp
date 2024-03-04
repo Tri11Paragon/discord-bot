@@ -36,11 +36,31 @@ struct db_obj
             db.sync_schema();
         }
         
+        inline void flush()
+        {
+            db.db_release_memory();
+        }
+        
+        inline auto messages()
+        {
+            return db.count<message_t>();
+        }
+        
+        inline auto users()
+        {
+            return db.count<user_info_t>();
+        }
+        
+        inline auto servers()
+        {
+            return db.count<server_info_t>();
+        }
+        
         void load(dpp::cluster& bot, const dpp::guild& guild)
         {
             server_info_t server_inf;
             server_inf.name = guild.name;
-            server_inf.member_count = guild.member_count;
+            server_inf.member_count = std::to_string(guild.member_count);
             server_inf.icon = guild.get_icon_url();
             server_inf.discovery_splash = guild.get_discovery_splash_url();
             server_inf.description = guild.description;
@@ -101,7 +121,7 @@ struct db_obj
             process_queue(bot);
         }
         
-        void commit(const user_info_t& edited)
+        void commit(user_info_t edited)
         {
             auto existing_user = db.select(sql::object<user_info_t>(), sql::from<user_info_t>(),
                                            sql::where(sql::c(&user_info_t::userID) == edited.userID));
@@ -110,6 +130,18 @@ struct db_obj
             {
                 for (const auto& v : existing_user)
                 {
+                    if (edited.server_name.empty() && !v.server_name.empty())
+                        edited.server_name = v.server_name;
+                    
+                    if (edited.global_nickname.empty() && !v.global_nickname.empty())
+                        edited.global_nickname = v.global_nickname;
+                    
+                    if (edited.username.empty() && !v.username.empty())
+                        edited.username = v.username;
+                    
+                    if (v.username == edited.username && v.server_name == edited.server_name && v.global_nickname == edited.global_nickname)
+                        continue;
+                    
                     user_history_t history;
                     history.userID = v.userID;
                     history.old_username = v.username;
@@ -138,6 +170,9 @@ struct db_obj
             {
                 for (const auto& v : existing_channel)
                 {
+                    if (v.channelID == channel.channelID && v.channel_name == channel.channel_name && v.channel_topic == channel.channel_topic)
+                        continue;
+                    
                     channel_history_t history;
                     history.channelID = v.channelID;
                     history.old_channel_name = v.channel_name;
@@ -157,12 +192,12 @@ struct db_obj
         
         void commit(const message_t& message)
         {
-        
+            db.insert(message);
         }
         
         void commit(const attachment_t& attachment)
         {
-        
+            db.insert(attachment);
         }
         
         void commit(const message_edits_t& edited)
@@ -200,7 +235,7 @@ struct db_obj
                                         (c(&server_info_t::discovery_splash) == server.discovery_splash) &&
                                         (c(&server_info_t::banner) == server.banner)));
             if (data.empty())
-                db.insert(server);
+                db.replace(server);
         }
         
         void process_queue(dpp::cluster& bot)
@@ -328,6 +363,11 @@ int main(int argc, const char** argv)
     
     dpp::cluster bot(args.get<std::string>("token"), dpp::i_default_intents | dpp::i_message_content | dpp::i_all_intents | dpp::i_guild_members);
     
+    bot.start_timer([](const auto& v) {
+        for (auto& db : databases)
+            db.second->flush();
+    }, 60);
+    
     bot.on_ready([&bot](const dpp::ready_t& event) {
         if (dpp::run_once<struct fetch_active_guilds>())
         {
@@ -423,7 +463,15 @@ int main(int argc, const char** argv)
         if (event.msg.id == bot.me.id)
             return;
         if (blt::string::starts_with(event.msg.content, "!dump"))
-        {}
+        {
+            event.send("Server Count: " + std::to_string(databases.size()));
+            for (auto& db : databases)
+            {
+                event.send("----------{GuildID: " + std::to_string(db.first) + "}----------");
+                event.send("Member Count: " + std::to_string(db.second->users()));
+                event.send("Messages: " + std::to_string(db.second->messages()));
+            }
+        }
         auto& storage = get(event.msg.guild_id);
         message_t message;
         message.messageID = event.msg.id;
