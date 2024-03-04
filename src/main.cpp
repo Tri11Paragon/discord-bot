@@ -17,6 +17,23 @@
 namespace sql = sqlite_orm;
 using namespace db;
 
+struct discord_message
+{
+    private:
+        std::string message;
+    public:
+        template<typename T>
+        discord_message& operator+=(T&& t)
+        {
+            message += std::forward<T>(t);
+        }
+        
+        void send()
+        {
+        
+        }
+};
+
 struct db_obj
 {
     private:
@@ -54,6 +71,13 @@ struct db_obj
         inline auto servers()
         {
             return db.count<server_info_t>();
+        }
+        
+        inline void printMessages()
+        {
+            using namespace sql;
+            auto data = db.select(object<message_t>);
+            
         }
         
         void load(dpp::cluster& bot, const dpp::guild& guild)
@@ -464,13 +488,34 @@ int main(int argc, const char** argv)
             return;
         if (blt::string::starts_with(event.msg.content, "!dump"))
         {
-            event.send("Server Count: " + std::to_string(databases.size()));
+            std::string message = "Server Count: ";
+            message += std::to_string(databases.size());
+            message += '\n';
             for (auto& db : databases)
             {
-                event.send("----------{GuildID: " + std::to_string(db.first) + "}----------");
-                event.send("Member Count: " + std::to_string(db.second->users()));
-                event.send("Messages: " + std::to_string(db.second->messages()));
+                message += "----------{GuildID: ";
+                message += std::to_string(db.first);
+                message += "}----------";
+                message += '\n';
+                message += "Member Count: ";
+                message += std::to_string(db.second->users());
+                message += '\n';
+                message += "Messages: ";
+                message += std::to_string(db.second->messages());
+                message += '\n';
             }
+            while (message.length() > 2000)
+            {
+                auto message_view = std::string_view(message).substr(0, 2000);
+                auto pos = message_view.find_last_of('\n');
+                event.send(message.substr(0, pos));
+                message = message.substr(pos);
+            }
+        }
+        if (blt::string::starts_with(event.msg.content, "!messages"))
+        {
+            for (auto& db : databases)
+                db.second->printMessages();
         }
         auto& storage = get(event.msg.guild_id);
         message_t message;
