@@ -26,11 +26,26 @@ struct discord_message
         discord_message& operator+=(T&& t)
         {
             message += std::forward<T>(t);
+            return *this;
         }
         
-        void send()
+        [[nodiscard]] std::string_view get() const
         {
+            return message;
+        }
         
+        template<typename... Args, typename T, typename... UArgs>
+        void send(const T& event, void (T::*func)(Args...) const, UArgs&& ... args)
+        {
+            std::string message_copy = message;
+            while (message_copy.length() > 2000)
+            {
+                auto message_view = std::string_view(message_copy).substr(0, 2000);
+                auto pos = message_view.find_last_of('\n');
+                (event.*func)(message_copy.substr(0, pos), std::forward<UArgs>(args)...);
+                message_copy = message_copy.substr(pos);
+            }
+            (event.*func)(message_copy, std::forward<UArgs>(args)...);
         }
 };
 
@@ -75,8 +90,8 @@ struct db_obj
         
         inline void printMessages()
         {
-            using namespace sql;
-            auto data = db.select(object<message_t>);
+            //using namespace sql;
+            //auto data = db.select(object<message_t>);
             
         }
         
@@ -181,7 +196,18 @@ struct db_obj
         
         void commit(const user_history_t& edited)
         {
-            db.insert(edited);
+            using namespace sql;
+            auto existing_data = db.select(columns(&user_history_t::userID), from<user_history_t>(),
+                                           where(c(&user_history_t::userID) == edited.userID &&
+                                                 c(&user_history_t::time_changed) == edited.time_changed));
+            
+            if (!existing_data.empty())
+            {
+                BLT_WARN("Trying to insert user history data yet already exists!");
+                return;
+            }
+            
+            db.replace(edited);
         }
         
         void commit(const channel_info_t& channel)
@@ -211,22 +237,78 @@ struct db_obj
         
         void commit(const channel_history_t& channel)
         {
-            db.insert(channel);
+            using namespace sql;
+            auto existing_data = db.select(columns(&channel_history_t::channelID), from<channel_history_t>(),
+                                           where(c(&channel_history_t::channelID) == channel.channelID &&
+                                                 c(&channel_history_t::time_changed) == channel.time_changed));
+            
+            if (!existing_data.empty())
+            {
+                BLT_WARN("Trying to insert channel history data yet already exists!");
+                return;
+            }
+            
+            db.replace(channel);
         }
         
         void commit(const message_t& message)
         {
-            db.insert(message);
+            using namespace sql;
+            auto existing_data = db.select(columns(&message_t::messageID), from<message_t>(),
+                                           where(c(&message_t::messageID) == message.messageID));
+            
+            if (!existing_data.empty())
+            {
+                BLT_WARN("Trying to insert message data yet message already exists!");
+                return;
+            }
+            
+            db.replace(message);
         }
         
         void commit(const attachment_t& attachment)
         {
-            db.insert(attachment);
+            using namespace sql;
+            auto existing_data = db.select(columns(&attachment_t::messageID), from<attachment_t>(),
+                                           where(c(&attachment_t::messageID) == attachment.messageID &&
+                                                 c(&attachment_t::attachmentID) == attachment.attachmentID));
+            
+            if (!existing_data.empty())
+            {
+                BLT_WARN("Trying to insert attachment data yet attachment already exists!");
+                return;
+            }
+            
+            db.replace(attachment);
         }
         
-        void commit(const message_edits_t& edited)
+        void commit(message_edits_t edited)
         {
-            db.insert(edited);
+            using namespace sql;
+            try
+            {
+                auto message_data = db.get<message_t>(edited.messageID);
+                edited.old_content = message_data.content;
+                message_data.content = edited.new_content;
+                db.update(message_data);
+            } catch (const std::system_error& ignored)
+            {
+                BLT_WARN("Failed to fetch message ID, user is trying to edit message which does not exist!");
+            }
+            
+            auto existing_data = db.select(columns(&message_edits_t::messageID), from<message_edits_t>(),
+                                           where(c(&message_edits_t::messageID) == edited.messageID &&
+                                                 c(&message_edits_t::time_changed) == edited.time_changed &&
+                                                 c(&message_edits_t::old_content) == edited.old_content &&
+                                                 c(&message_edits_t::new_content) == edited.new_content));
+            
+            if (!existing_data.empty())
+            {
+                BLT_WARN("Trying to insert message edits history data yet already exists!");
+                return;
+            }
+            
+            db.replace(edited);
         }
         
         void commit(message_deletes_t& deleted)
@@ -244,7 +326,7 @@ struct db_obj
             deleted.content = std::get<0>(message_content[0]);
             deleted.userID = std::get<1>(message_content[0]);
             
-            db.insert(deleted);
+            db.replace(deleted);
         }
         
         void commit(const server_info_t& server)
@@ -387,7 +469,7 @@ int main(int argc, const char** argv)
     
     dpp::cluster bot(args.get<std::string>("token"), dpp::i_default_intents | dpp::i_message_content | dpp::i_all_intents | dpp::i_guild_members);
     
-    bot.start_timer([](const auto& v) {
+    bot.start_timer([](const auto&) {
         for (auto& db : databases)
             db.second->flush();
     }, 60);
@@ -477,6 +559,7 @@ int main(int argc, const char** argv)
     bot.on_message_update(wait_wrapper<dpp::message_update_t>([&bot](const dpp::message_update_t& event) {
         message_edits_t edited;
         edited.messageID = event.msg.id;
+        edited.time_changed = blt::system::getCurrentTimeMilliseconds();
         edited.new_content = event.msg.content;
         get(event.msg.guild_id).commit(edited);
         BLT_INFO("%ld (from user %ld in channel %ld ['%s']) -> '%s'", event.msg.id, event.msg.author.id, event.msg.channel_id,
@@ -488,7 +571,8 @@ int main(int argc, const char** argv)
             return;
         if (blt::string::starts_with(event.msg.content, "!dump"))
         {
-            std::string message = "Server Count: ";
+            discord_message message;
+            message += "Server Count: ";
             message += std::to_string(databases.size());
             message += '\n';
             for (auto& db : databases)
@@ -504,13 +588,10 @@ int main(int argc, const char** argv)
                 message += std::to_string(db.second->messages());
                 message += '\n';
             }
-            while (message.length() > 2000)
-            {
-                auto message_view = std::string_view(message).substr(0, 2000);
-                auto pos = message_view.find_last_of('\n');
-                event.send(message.substr(0, pos));
-                message = message.substr(pos);
-            }
+            BLT_TRACE(message.get());
+            message.send<const std::string&, dpp::command_completion_event_t>(event,
+                                                                              &dpp::message_create_t::send,
+                                                                              dpp::utility::log_error());
         }
         if (blt::string::starts_with(event.msg.content, "!messages"))
         {

@@ -87,6 +87,7 @@ namespace db
     struct message_edits_t
     {
         blt::u64 messageID;
+        blt::u64 time_changed;
         std::string old_content;
         std::string new_content;
     };
@@ -202,10 +203,12 @@ namespace db
         using namespace sqlite_orm;
         return make_table("message_edits",
                           make_column("messageID", &message_edits_t::messageID),
+                          make_column("time_changed", &message_edits_t::time_changed),
                           make_column("old_content", &message_edits_t::old_content),
                           make_column("new_content", &message_edits_t::new_content),
                           foreign_key(&message_edits_t::messageID).references(&message_t::messageID),
-                          primary_key(&message_edits_t::messageID, &message_edits_t::old_content, &message_edits_t::new_content));
+                          primary_key(&message_edits_t::messageID, &message_edits_t::time_changed, &message_edits_t::old_content,
+                                      &message_edits_t::new_content));
     }
     
     using message_edits_table_t = decltype(make_message_edits_table());
