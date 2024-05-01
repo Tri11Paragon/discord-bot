@@ -8,6 +8,10 @@ option(ENABLE_TSAN "Enable the thread data race sanitizer" OFF)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 17)
 
+#cmake_policy(SET CMP0069 NEW)
+#include(CheckIPOSupported)
+#check_ipo_supported(RESULT supported OUTPUT error)
+
 #set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
 #set(BUILD_SHARED_LIBS OFF)
 #set(POSITION_INDEPENDENT_CODE ON)
@@ -21,6 +25,14 @@ add_subdirectory(libs/DPP-10.0.29)
 add_subdirectory(libs/sqlite_orm-1.8.2)
 
 find_package(CURL)
+
+if( supported )
+    message(STATUS "IPO / LTO enabled")
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+    set_property(TARGET BLT PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+else()
+    message(STATUS "IPO / LTO not supported: <${error}>")
+endif()
 
 include_directories(include/)
 file(GLOB_RECURSE PROJECT_BUILD_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")

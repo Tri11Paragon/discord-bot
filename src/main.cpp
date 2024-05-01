@@ -78,6 +78,11 @@ struct db_obj
             return db.count<message_t>();
         }
         
+        inline auto message_count(blt::u64 channel, blt::u64 time)
+        {
+        
+        }
+        
         inline auto users()
         {
             return db.count<user_info_t>();
@@ -587,6 +592,18 @@ int main(int argc, const char** argv)
                 message += "Messages: ";
                 message += std::to_string(db.second->messages());
                 message += '\n';
+            }
+            BLT_TRACE(message.get());
+            message.send<const std::string&, dpp::command_completion_event_t>(event,
+                                                                              &dpp::message_create_t::send,
+                                                                              dpp::utility::log_error());
+        }
+        if (blt::string::starts_with(event.msg.content, "!stats"))
+        {
+            discord_message message;
+            for (auto& db : databases)
+            {
+                db.second.
             }
             BLT_TRACE(message.get());
             message.send<const std::string&, dpp::command_completion_event_t>(event,
