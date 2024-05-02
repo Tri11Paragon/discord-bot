@@ -601,10 +601,7 @@ int main(int argc, const char** argv)
         if (blt::string::starts_with(event.msg.content, "!stats"))
         {
             discord_message message;
-            for (auto& db : databases)
-            {
-                db.second.
-            }
+
             BLT_TRACE(message.get());
             message.send<const std::string&, dpp::command_completion_event_t>(event,
                                                                               &dpp::message_create_t::send,
