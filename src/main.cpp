@@ -13,6 +13,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
+#include <cstdlib>
 
 namespace sql = sqlite_orm;
 using namespace db;
@@ -469,10 +470,20 @@ int main(int argc, const char** argv)
     parser.addArgument(blt::arg_builder("-p", "--path").setAction(blt::arg_action_t::STORE).setHelp("Path to store the archive data").build());
     
     auto args = parser.parse_args(argc, argv);
-    path = args.get<std::string>("path");
+    if (args.contains("path"))
+        path = args.get<std::string>("path");
+    else
+        path = std::getenv("PATH");
+    
+    std::string token;
+    if (args.contains("token"))
+        token = args.get<std::string>("token");
+    else
+        token = std::getenv("TOKEN");
+
     std::filesystem::create_directories(path);
     
-    dpp::cluster bot(args.get<std::string>("token"), dpp::i_default_intents | dpp::i_message_content | dpp::i_all_intents | dpp::i_guild_members);
+    dpp::cluster bot(token, dpp::i_default_intents | dpp::i_message_content | dpp::i_all_intents | dpp::i_guild_members);
     
     bot.start_timer([](const auto&) {
         for (auto& db : databases)
